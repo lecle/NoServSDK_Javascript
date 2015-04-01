@@ -803,8 +803,12 @@ SuperType.Query.prototype = {
         return this;
     },
 
-    toJSON: function() {
+    toJSON: function(type) {
         var whereData = JSON.stringify(this._where);
+
+        if(type === 'where')
+            return whereData;
+
         var params = {
             where: whereData
         };
@@ -948,12 +952,22 @@ SuperType.Query.prototype = {
         this._addCondition(key, "$exists", false);
         return this;
     },
+    matches: function(key, regex, modifiers) {
+        this._addCondition(key, "$regex", regex);
+        if (!modifiers) { modifiers = ""; }
+        if (regex.ignoreCase) { modifiers += 'i'; }
+        if (regex.multiline) { modifiers += 'm'; }
 
+        if (modifiers && modifiers.length) {
+            this._addCondition(key, "$options", modifiers);
+        }
+        return this;
+    },
     _orQuery: function(arrs) {
         //for("arr만큼돌면서 스트링 더하기")
 
         var queryJSON = collect(arrs, function(q) {
-            return q.toJSON();
+            return q.toJSON('where');
         });
 
         this._where.$or = queryJSON;
@@ -1418,9 +1432,50 @@ var mimeTypes = {
     zip: "application/zip"
 };
 
-
 // File Class End
-
 // ======================================================
+
+SuperType.Cloud = {};
+SuperType.Cloud.run = function(functionName, param, callF) {
+
+    if(callF.test) {
+
+        var response = {
+
+            success : function(data) {
+
+                callF.success(data);
+            },
+            error : function(message) {
+
+                callF.error(param, message);
+            }
+        };
+
+        callF.test(param, response);
+    } else {
+
+        var request =  SuperType._request({
+            route: "functions",
+            objectId : functionName,
+            method: "GET",
+            useMasterKey: false,
+            data: JSON.stringify(param)
+        }, {
+
+            success : function(data) {
+
+                callF.success(data);
+            },
+            error : function(data, message) {
+
+                callF.error(data, message);
+            }
+        });
+
+        return request;
+    }
+};
+
 //  Class
 var Noserv = SuperType;
