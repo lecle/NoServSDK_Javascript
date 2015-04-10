@@ -1477,5 +1477,70 @@ SuperType.Cloud.run = function(functionName, param, callF) {
     }
 };
 
+// acl
+// 임시 API입니다.
+SuperType.ObjectACL = function(className, sessionToken) {
+
+    this.ACL = {};
+    this.className = className;
+    this.sessionToken = sessionToken;
+
+    this.setReadAccess = function(userId, isAllow) {
+
+        if(!this.ACL[userId])
+            this.ACL[userId] = {};
+
+        this.ACL[userId].read = isAllow;
+    };
+
+    this.setWriteAccess = function(userId, isAllow) {
+
+        if(!this.ACL[userId])
+            this.ACL[userId] = {};
+
+        this.ACL[userId].write = isAllow;
+    };
+
+    this.setMasterAccess = function(userId, isAllow) {
+
+        if(!this.ACL[userId])
+            this.ACL[userId] = {};
+
+        this.ACL[userId].master = isAllow;
+    };
+
+    this.setPublicReadAccess = function(isAllow) {
+
+        this.setReadAccess('*', isAllow);
+    };
+
+    this.setPublicWriteAccess = function(isAllow) {
+
+        this.setWriteAccess('*', isAllow);
+    };
+
+    this.save = function(callF) {
+
+        var request =  SuperType._request({
+            route: "classes",
+            className: this.className,
+            objectId: 'ACL',
+            method: "POST",
+            useMasterKey: false,
+            data: JSON.stringify({ACL : this.ACL, _sessionToken : this.sessionToken})
+        }, {
+
+            success : function(data) {
+
+                callF.success(data);
+            },
+            error : function(data, message) {
+
+                callF.error(data, message);
+            }
+        });
+    };
+};
+
 //  Class
 var Noserv = SuperType;
