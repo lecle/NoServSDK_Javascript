@@ -1542,5 +1542,51 @@ SuperType.ObjectACL = function(className, sessionToken) {
     };
 };
 
+// aggregate
+SuperType.Aggregate = function(obj){
+
+    this.objectClass = obj;
+    this.className = obj._className;
+
+    this._aggregate = [];
+};
+
+SuperType.Aggregate.prototype = {
+
+    push : function(pipeline) {
+
+        this._aggregate.push(pipeline);
+    },
+
+    toJSON: function(type) {
+
+        var params = {
+            aggregate: this._aggregate
+        };
+
+        return JSON.stringify(params);
+    },
+
+    aggregate: function(options) {
+        options = options || {};
+        var route = "classes";
+
+        if(this.className == 'User'){
+            route = "users";
+            this.className = null;
+        }
+
+        var request = SuperType._request({
+            route: route,
+            className: this.className,
+            method: "GET",
+            useMasterKey: options.useMasterKey,
+            data: this.toJSON()
+        },options);
+
+        return request
+    }
+};
+
 //  Class
 var Noserv = SuperType;
