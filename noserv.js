@@ -427,7 +427,7 @@ SuperType._request = function(options, callF, addF) {
 
     delete dataObject._appId;
     delete dataObject._appKey;
-    delete dataObject._appKey;
+    delete dataObject._masterKey;
     delete dataObject._sessionToken;
     delete dataObject._serverUrl;
     delete dataObject._className;
