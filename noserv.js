@@ -784,6 +784,9 @@ SuperType.Query.prototype = {
         var params = JSON.parse(this.toJSON());
         params.limit = 1;
 
+        if(options.useMasterKey && this._masterKey)
+            params._masterKey = this._masterKey;
+
         var request = SuperType._request({
             route: route,
             className: this.className,
