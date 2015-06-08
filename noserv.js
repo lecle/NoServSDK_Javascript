@@ -158,7 +158,7 @@ var testGetAppKey = function(appId){
 // 2. Core-1 SuperType, SubType
 
 var SuperType = function(className, sessionToken, appId, appKey, masterKey) {
-    this._serverUrl = "https://api.noserv.io"
+    this._serverUrl = "https://api.noserv.io";
     this._className = className;
     this._sessionToken =  sessionToken;
     this._appId = appId;
@@ -383,6 +383,7 @@ SuperType._request = function(options, callF, addF) {
 
     if (route !== "batch" &&
         route !== "classes" &&
+        route !== "schedule" &&    // added for schedule service
         route !== "events" &&
         route !== "files" &&
         route !== "functions" &&
@@ -510,7 +511,7 @@ SuperType.sendAjax = function(method, url, data, callF, addF){
                 } catch (e) {
                     console.log(e);
                 }
-                if (response) {
+                if (response || dataMethod === 'DELETE'){  //  modified from if ( response ) for function and schedule service
                     if(addF){
                         addF(response);
                     }
@@ -679,6 +680,8 @@ SuperType.Object = function(objectName, sessionToken, appId, appKey ){
 
     var Object = new SuperType(objectName, sessionToken, appId, appKey);
 
+    Object.route = "classes";   // ->
+    Object.className = null;    // <- added for function and schedule service
 
     Object.save = function(attrs, options) {
         if(!attrs){
@@ -688,11 +691,14 @@ SuperType.Object = function(objectName, sessionToken, appId, appKey ){
                 return "객체데이터를 넘기지 않았습니다.";
         }
 
+        if(attrs._className)                        // ->
+            Object.className = attrs._className;    // <- added for function and schedule service
+
         var method = (attrs && attrs.objectId) ? 'PUT' : 'POST';
 
         var request = SuperType._request({
-            route: "classes",
-            className: attrs._className,
+            route: Object.route,            // -> modified from route : "classes"
+            className: Object.className,    // <- modified from className: attrs._className for function and schedule service
             objectId: (attrs && attrs.objectId) ? attrs.objectId : null,
             method: method,
             useMasterKey: options.useMasterKey,
@@ -700,7 +706,7 @@ SuperType.Object = function(objectName, sessionToken, appId, appKey ){
         },options);
 
         return request;
-    }
+    };
 
     Object.delete = function(attrs, options) {
         if(!attrs || !attrs.objectId){
@@ -709,11 +715,15 @@ SuperType.Object = function(objectName, sessionToken, appId, appKey ){
             else
                 return "객체 ID값이 없습니다.";
         }
+
+        if(attrs._className)                    // ->
+            Object.className = attrs._className;// <- added for function and schedule service
+
         options = options || {};
 
         var request =  SuperType._request({
-            route: "classes",
-            className: attrs._className,
+            route: Object.route,            // -> modified from route : "classes"
+            className: Object.className,    // <- modified from className: attrs._className for function and schedule service
             method: "DELETE",
             objectId: (attrs && attrs.objectId) ? attrs.objectId : null,
             useMasterKey: options.useMasterKey,
@@ -738,7 +748,8 @@ SuperType.Query = function(obj){
     this._limit = -1; // negative limit means, do not send a limit
     this._skip = 0;
     this._extraOptions = {};
-}
+    this.route = obj.route; // added for function and schedule service
+};
 
 SuperType.Query.or = function() {
     var queries = toArray(arguments);
@@ -770,7 +781,10 @@ SuperType.Query.prototype = {
 
     get: function(objectId, options) {
         var self = this;
-        var route = "classes";
+        var route = this.route || "classes";    // -> modified from var route = "classes";
+
+        if(route !== 'classes')
+            this.className = null;              // <- added for schedule and function service
 
         if(this.className == 'User'){
             route = "users";
@@ -784,8 +798,8 @@ SuperType.Query.prototype = {
         var params = JSON.parse(this.toJSON());
         params.limit = 1;
 
-        if(options.useMasterKey && this._masterKey)
-            params._masterKey = this._masterKey;
+        if(options.useMasterKey && this._masterKey)     // ->
+            params._masterKey = this._masterKey;        // <- added for schedule and function service to inject masterkey
 
         var request = SuperType._request({
             route: route,
@@ -842,19 +856,28 @@ SuperType.Query.prototype = {
 
     find: function(options) {
         options = options || {};
-        var route = "classes";
+
+        var route = this.route || "classes";    // -> modified from var route = "classes";
+        if( route !== 'classes')
+            this.className = null;              // <- added for schedule and function service
 
         if(this.className == 'User'){
             route = "users";
             this.className = null;
         }
 
+        var params = JSON.parse( this.toJSON() );   // ->
+        if( options.useMasterKey && this._masterKey ){
+            params._masterKey = this._masterKey;
+            params._limit = -1;
+        }                                           // <- added to add master key for schedule find function
+
         var request = SuperType._request({
             route: route,
             className: this.className,
             method: "GET",
             useMasterKey: options.useMasterKey,
-            data: this.toJSON()
+            data: JSON.stringify( params ) // modified from data: this.toJSON() for schedule find function
         },options);
 
         return request
@@ -1461,7 +1484,7 @@ SuperType.Cloud.run = function(functionName, param, callF) {
         var request =  SuperType._request({
             route: "functions",
             objectId : functionName,
-            method: "GET",
+            method: "POST",
             useMasterKey: false,
             data: JSON.stringify(param)
         }, {
