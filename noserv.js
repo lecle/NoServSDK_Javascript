@@ -220,7 +220,12 @@ SuperType.prototype.extend = function(props){
 
     var prop, obj;
     obj = Object.create(this);
-//        obj['super'] = this;
+    obj._serverUrl = this._serverUrl;
+    obj._sessionToken = this._sessionToken;
+    obj._appKey = this._appKey;
+    obj._className = this._className;
+    obj._appId = this._appId;
+    obj._masterKey = this._masterKey;
 
     for(prop in props) {
 //            console.log('0---');
@@ -264,7 +269,6 @@ SuperType.prototype.extend = function(props){
             obj[prop] = propsDefault[prop];
         }
     }
-
     return obj  || {};
 }
 
@@ -272,18 +276,17 @@ SuperType.prototype.getJson = function(){
 
     // Considering a possible duplicate member case ( not general ) : Add a member to Sub Object which is exist in Super Object as a same name.
 
-    var testSubJson = JSON.stringify(this);
-    console.log('testSubJson:' + testSubJson);
-    // testSubJson:{"x":20,"y":30}
+    delete this.className;      //modified
 
     var subObj = this;
     var subPropNames = Object.getOwnPropertyNames(subObj);
-    console.log( 'subPropNames:' + subPropNames );
+    delete subPropNames.route;
 
+/*
     var superObj = eval(this._className);
     var superPropNames = Object.getOwnPropertyNames(superObj);
     console.log( 'superPropNames:' + superPropNames);
-
+*/
     var allKeys = [];
 
 
@@ -294,7 +297,7 @@ SuperType.prototype.getJson = function(){
             allKeys.push(propNames[prop]);
         }
     }
-
+/*
     for ( var prop in propNames = superPropNames ){
 
         if( ( typeof eval('this.' + propNames[prop]) ) != 'function' && ( typeof eval('superObj.' + propNames[prop]) ) != 'undefined' ){
@@ -302,7 +305,7 @@ SuperType.prototype.getJson = function(){
             allKeys.push(propNames[prop]);
         }
     }
-
+*/
     console.log ( 'allKeys:' + allKeys);
 
     var uniqueKeys = unique(allKeys);
@@ -351,7 +354,6 @@ SuperType._request = function(options, callF, addF) {
     var method = options.method;
     var useMasterKey = options.useMasterKey;
     var dataObject = JSON.parse(options.data);
-
     var sessionToken = dataObject._sessionToken;
 
     if(className == "User"){
@@ -366,8 +368,6 @@ SuperType._request = function(options, callF, addF) {
         }else{
             throw "applicationId not exist.";
         }
-
-
     }
 
     if (!dataObject._appKey && !dataObject._masterKey) {
@@ -384,6 +384,9 @@ SuperType._request = function(options, callF, addF) {
     if (route !== "batch" &&
         route !== "classes" &&
         route !== "schedule" &&    // added for schedule service
+        route !== "apps" &&         // added for app service
+        route !== "analytics" &&         // added for analytics service
+        route !== "installations" &&         // added for installations service
         route !== "events" &&
         route !== "files" &&
         route !== "functions" &&
@@ -447,9 +450,10 @@ SuperType.sendXdr = function(method, url, data, callF, addF){
     xdr.onload = function() {
         var response;
         try {
-            if(dataMethod != null && dataMethod != 'DELETE'){
+            if(dataMethod != null && dataMethod != 'DELETE' && xdr.responseText !==  ''){
                 response = JSON.parse(xdr.responseText);
-                console.log(xhr.responseText);
+            } else if( xdr.responseText ===  '' ){
+                response = null;
             }
         } catch (e) {
             console.log(e);
@@ -501,12 +505,14 @@ SuperType.sendAjax = function(method, url, data, callF, addF){
             handled = true;
 
             console.log( 'xhr.status:' + xhr.status );
-
-            if (xhr.status >= 200 && xhr.status < 300) {
+            if (xhr.status >= 200 && xhr.status < 300){
                 var response;
                 try {
-                    if(dataMethod != null && dataMethod != 'DELETE'){
-                        response = JSON.parse(xhr.responseText);
+                    if(dataMethod != null && dataMethod != 'DELETE' &&  xhr.responseText !==  '' ){
+                        response = JSON.parse( xhr.responseText );
+                    } else if( xhr.responseText ===  '' ){ // for setTableACL button
+                        response = null;
+                        return callF.success(response);
                     }
                 } catch (e) {
                     console.log(e);
@@ -604,10 +610,8 @@ SuperType.User = function(sessionToken, appId, appKey ){
     }
 
     User.logIn = function(username, password, options) {
-        options = options || {};
-        //console.log(User.get("username"));
-        //this.set("username", encodeURIComponent(username));
-        //this.set("password", encodeURIComponent(password));
+
+        var options = options || {};
         this.set("username", username);
         this.set("password", password);
         //console.log(User.get("username"));
@@ -679,10 +683,7 @@ SuperType.User = function(sessionToken, appId, appKey ){
 SuperType.Object = function(objectName, sessionToken, appId, appKey ){
 
     var Object = new SuperType(objectName, sessionToken, appId, appKey);
-
-    Object.route = "classes";   // ->
-    Object.className = null;    // <- added for function and schedule service
-
+    Object.route = 'classes';
     Object.save = function(attrs, options) {
         if(!attrs){
             if(options && options.error)
@@ -698,7 +699,7 @@ SuperType.Object = function(objectName, sessionToken, appId, appKey ){
 
         var request = SuperType._request({
             route: Object.route,            // -> modified from route : "classes"
-            className: Object.className,    // <- modified from className: attrs._className for function and schedule service
+            className: Object._className,    // <- modified from className: attrs._className for function and schedule service
             objectId: (attrs && attrs.objectId) ? attrs.objectId : null,
             method: method,
             useMasterKey: options.useMasterKey,
@@ -743,13 +744,18 @@ SuperType.Query = function(obj){
     this.objectClass = obj;
     this.className = obj._className;
 
+    this._sessionToken = obj._sessionToken;
+    this._appKey = obj._appKey;
+    this._className = obj._className;
+    this._appId = obj._appId;
+
     this._where = {};
     this._include = [];
     this._limit = -1; // negative limit means, do not send a limit
     this._skip = 0;
     this._extraOptions = {};
     this.route = obj.route; // added for function and schedule service
-};
+}
 
 SuperType.Query.or = function() {
     var queries = toArray(arguments);
@@ -791,7 +797,6 @@ SuperType.Query.prototype = {
             this.className = null;
         }
 
-
         self.equalTo('objectId', objectId);
         options = options || {};
 
@@ -801,13 +806,19 @@ SuperType.Query.prototype = {
         if(options.useMasterKey && this._masterKey)     // ->
             params._masterKey = this._masterKey;        // <- added for schedule and function service to inject masterkey
 
-        var request = SuperType._request({
+        var optionsObj = {                              // -> for ACL
             route: route,
             className: this.className,
             method: "GET",
             useMasterKey: options.useMasterKey,
             data: JSON.stringify(params)
-        },options);
+        };                                              // <-
+
+        if( options.objectId === 'ACL' ){    // -> for ACL
+            optionsObj.objectId = options.objectId;
+        }                                               // <-
+
+        var request = SuperType._request( optionsObj, options );
 
         return request
     },
@@ -827,7 +838,11 @@ SuperType.Query.prototype = {
             return whereData;
 
         var params = {
-            where: whereData
+            where: whereData,
+            _sessionToken : this._sessionToken,
+            _appKey : this._appKey,
+            _className : this._className,
+            _appId : this._appId
         };
 
         if (this._include.length > 0) {
@@ -842,7 +857,7 @@ SuperType.Query.prototype = {
         if (this._skip > 0) {
             params.skip = this._skip;
         }
-        if (this._order !== undefined) {
+        if( this._order ){
             params.order = this._order.join(",");
         }
 
@@ -872,6 +887,17 @@ SuperType.Query.prototype = {
             params._limit = -1;
         }                                           // <- added to add master key for schedule find function
 
+        if( options.hasOwnProperty('order')) {      // ->
+            params.order = options.order;
+        }                                           //  <-
+
+        if( this._sessionToken ) {                        // ->
+            params._sessionToken = this._sessionToken;
+        }
+
+        if(options.aggregate){
+            params.aggregate = options.aggregate;
+        }
         var request = SuperType._request({
             route: route,
             className: this.className,
@@ -886,8 +912,10 @@ SuperType.Query.prototype = {
     count: function(options) {
         var self = this;
         options = options || {};
-
         var params = JSON.parse(this.toJSON());
+        if( this._sessionToken ) {
+            params._sessionToken = this._sessionToken;
+        }
         params.limit = 0;
         params.count = 1;
         var request = SuperType._request({
@@ -1139,6 +1167,7 @@ var readAsync = function(file, type) {
 };
 
 SuperType.File = function(name, data, type) {
+
     this._name = name;
 
     // Guess the content type from the extension if we need to.
@@ -1505,11 +1534,12 @@ SuperType.Cloud.run = function(functionName, param, callF) {
 
 // acl
 // 임시 API입니다.
-SuperType.ObjectACL = function(className, sessionToken) {
+SuperType.ObjectACL = function(className, sessionToken, masterKey) {
 
     this.ACL = {};
     this.className = className;
     this.sessionToken = sessionToken;
+    this.masterKey = masterKey;
 
     this.setReadAccess = function(userId, isAllow) {
 
@@ -1552,8 +1582,8 @@ SuperType.ObjectACL = function(className, sessionToken) {
             className: this.className,
             objectId: 'ACL',
             method: "POST",
-            useMasterKey: false,
-            data: JSON.stringify({ACL : this.ACL, _sessionToken : this.sessionToken})
+            useMasterKey: true,
+            data: JSON.stringify({ACL : this.ACL, _sessionToken : this.sessionToken, _masterKey : this.masterKey })
         }, {
 
             success : function(data) {
@@ -1573,6 +1603,11 @@ SuperType.Aggregate = function(obj){
 
     this.objectClass = obj;
     this.className = obj._className;
+    this.masterKey = obj.masterKey;
+    this._sessionToken = obj._sessionToken;
+    this._appKey = obj._appKey;
+    this._className = obj._className;
+    this._appId = obj._appId;
 
     this._aggregate = [];
 };
@@ -1584,10 +1619,15 @@ SuperType.Aggregate.prototype = {
         this._aggregate.push(pipeline);
     },
 
-    toJSON: function(type) {
+    toJSON: function() {
 
         var params = {
-            aggregate: this._aggregate
+            aggregate: this._aggregate,
+            _masterKey : this.masterKey,
+            _sessionToken : this._sessionToken,
+            _appKey : this._appKey,
+            _className : this._className,
+            _appId : this._appId
         };
 
         return JSON.stringify(params);
